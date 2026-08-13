@@ -14,8 +14,45 @@ const YEAR_RE = /\b(?:in|from|during|year)\s+(20\d{2}|19\d{2})\b/i;
 const YEAR_ONLY_RE = /\b(20\d{2}|19\d{2})\b/;
 const IS_RE = /\b(?:is not|isn't|isnt|not in|not|!=|is|=|:)\s+/i;
 
+/** English that means "these labels are one dimension, those are another". */
+const CROSS_AND_CUES =
+  /\b(from|in|within|among|of|who are|that are|employees?|people|staff|records?|rows?)\b/i;
+
+const STOP = new Set([
+  "all",
+  "the",
+  "a",
+  "an",
+  "or",
+  "and",
+  "from",
+  "in",
+  "of",
+  "who",
+  "are",
+  "is",
+  "that",
+  "only",
+  "show",
+  "me",
+  "with",
+  "where",
+  "employees",
+  "employee",
+  "people",
+  "staff",
+  "records",
+  "record",
+  "rows",
+  "row",
+]);
+
 function num(raw: string): number {
   return Number(String(raw).replace(/[$,]/g, ""));
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function findColumnsInText(text: string, columns: string[]): string[] {
@@ -26,7 +63,6 @@ function findColumnsInText(text: string, columns: string[]): string[] {
     const key = col.toLowerCase();
     if (lower.includes(key) && !found.includes(col)) found.push(col);
   }
-  // compact aliases
   for (const col of columns) {
     const compact = col.toLowerCase().replace(/[^a-z0-9]/g, "");
     if (compact.length >= 3 && lower.includes(compact) && !found.includes(col)) found.push(col);
@@ -34,18 +70,58 @@ function findColumnsInText(text: string, columns: string[]): string[] {
   return found;
 }
 
-function splitTopLevel(text: string): { logic: "and" | "or"; parts: string[] } {
-  // Protect "between X and Y" so the inner and is not a splitter.
-  const protectedText = text.replace(BETWEEN_RE, (m) => m.replace(/\band\b/gi, "&&"));
-  const orParts = protectedText.split(/\s+\bor\b\s+/i);
-  if (orParts.length > 1) {
-    return { logic: "or", parts: orParts.map((p) => p.replace(/&&/g, "and").trim()).filter(Boolean) };
+type LabelHit = { column: string; value: string; start: number; end: number };
+
+function catalogLabels(report: InspectReport): Array<{ column: string; value: string }> {
+  const out: Array<{ column: string; value: string }> = [];
+  for (const col of report.columns) {
+    if (!col.uniqueValues?.length) continue;
+    if (col.kind === "id" || col.kind === "text") continue;
+    if (col.uniqueValues.length > 80) continue;
+    for (const value of col.uniqueValues) {
+      if (!value || value.length < 2) continue;
+      out.push({ column: col.name, value });
+    }
   }
-  const andParts = protectedText.split(/\s+\band\b\s+/i);
-  return {
-    logic: "and",
-    parts: andParts.map((p) => p.replace(/&&/g, "and").trim()).filter(Boolean),
-  };
+  out.sort((a, b) => b.value.length - a.value.length);
+  return out;
+}
+
+function extractLabelHits(text: string, report: InspectReport): LabelHit[] {
+  const lower = text.toLowerCase();
+  const taken: Array<[number, number]> = [];
+  const hits: LabelHit[] = [];
+  const overlaps = (s: number, e: number) => taken.some(([a, b]) => s < b && e > a);
+
+  for (const { column, value } of catalogLabels(report)) {
+    const needle = value.toLowerCase();
+    const re = new RegExp(`\\b${escapeRe(needle)}\\b`, "gi");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(lower))) {
+      const start = m.index;
+      const end = start + needle.length;
+      if (overlaps(start, end)) continue;
+      taken.push([start, end]);
+      hits.push({ column, value, start, end });
+    }
+  }
+  hits.sort((a, b) => a.start - b.start);
+  return hits;
+}
+
+function groupHitsByColumn(hits: LabelHit[]): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const h of hits) {
+    const list = map.get(h.column) ?? [];
+    if (!list.includes(h.value)) list.push(h.value);
+    map.set(h.column, list);
+  }
+  return map;
+}
+
+function conditionFor(column: string, values: string[]): FilterCondition {
+  if (values.length === 1) return { column, op: "eq", value: values[0] };
+  return { column, op: "in", value: values };
 }
 
 function defaultDateColumn(report: InspectReport): string | null {
@@ -61,90 +137,179 @@ function valuesFor(col: ColumnMeta | undefined, token: string): string | null {
   return contains.length === 1 ? (contains[0] ?? null) : null;
 }
 
-function parseClause(raw: string, report: InspectReport): FilterCondition | FilterGroup | { clarify: ClarifyQuestion } | null {
-  const text = raw.replace(/^(where|only|records?|rows?|employees?|with|show|me|the)\s+/i, "").trim();
-  if (!text) return null;
+function parseNumericAndDate(text: string, report: InspectReport): Array<FilterCondition | { clarify: ClarifyQuestion }> {
+  const found: Array<FilterCondition | { clarify: ClarifyQuestion }> = [];
   const columns = report.columnNames;
 
-  // between
   const between = text.match(BETWEEN_RE);
   if (between) {
     const colHit = findColumnsInText(text.replace(between[0], ""), columns)[0];
     const col = colHit ?? findColumnsInText(text, columns)[0];
     if (!col) {
-      return {
+      found.push({
         clarify: {
           question: `Between ${between[1]} and ${between[2]} — which column should I apply that range to?`,
           options: report.columns.filter((c) => c.kind.startsWith("numeric") || c.kind === "datetime").map((c) => c.name),
         },
-      };
+      });
+    } else {
+      found.push({ column: col, op: "between", value: [num(between[1]!), num(between[2]!)] });
     }
-    return { column: col, op: "between", value: [num(between[1]!), num(between[2]!)] };
   }
 
-  // year
-  const year = text.match(YEAR_RE) ?? (/\b(20\d{2}|19\d{2})\b/.test(text) && /from|in|during|year|records/i.test(text)
-    ? text.match(YEAR_ONLY_RE)
-    : null);
+  const year =
+    text.match(YEAR_RE) ??
+    (/\b(20\d{2}|19\d{2})\b/.test(text) && /from|in|during|year|records/i.test(text) ? text.match(YEAR_ONLY_RE) : null);
   if (year) {
     const dateCol =
       findColumnsInText(text, columns).find((c) => report.columns.find((m) => m.name === c)?.kind === "datetime") ??
       defaultDateColumn(report);
     if (!dateCol) {
-      return { clarify: { question: `I see the year ${year[1]}. Which date column should I use?`, options: columns } };
+      found.push({ clarify: { question: `I see the year ${year[1]}. Which date column should I use?`, options: columns } });
+    } else {
+      found.push({ column: dateCol, op: "year_eq", value: Number(year[1]) });
     }
-    return { column: dateCol, op: "year_eq", value: Number(year[1]) };
   }
 
-  // comparison
   const cmp = text.match(CMP_RE);
   if (cmp) {
     const word = cmp[1]!.toLowerCase();
     const rhs = cmp[2]!;
-    const col =
-      findColumnsInText(text.replace(cmp[0], ""), columns)[0] ?? findColumnsInText(text, columns)[0];
+    const col = findColumnsInText(text.replace(cmp[0], ""), columns)[0] ?? findColumnsInText(text, columns)[0];
     if (!col) {
       const numeric = report.columns.filter((c) => c.kind.startsWith("numeric") || c.kind === "datetime").map((c) => c.name);
-      return { clarify: { question: `${cmp[1]} ${rhs} — which column?`, options: numeric } };
+      found.push({ clarify: { question: `${cmp[1]} ${rhs} — which column?`, options: numeric } });
+    } else {
+      const meta = report.columns.find((c) => c.name === col);
+      if (meta?.kind === "datetime" && !/^\d{4}$/.test(rhs)) {
+        const op = /before|under|below|less|younger/.test(word) ? "date_before" : "date_after";
+        found.push({ column: col, op, value: rhs });
+      } else {
+        let op: FilterCondition["op"] = "gt";
+        if (/>=|at least|on or after/.test(word)) op = "gte";
+        else if (/<=|at most|on or before/.test(word)) op = "lte";
+        else if (/>|greater|more|older|above|over|after/.test(word)) op = "gt";
+        else op = "lt";
+        found.push({ column: col, op, value: num(rhs) });
+      }
     }
-    const meta = report.columns.find((c) => c.name === col);
-    if (meta?.kind === "datetime" && !/^\d{4}$/.test(rhs)) {
-      const op =
-        /before|under|below|less|younger/.test(word) ? "date_before" : "date_after";
-      return { column: col, op, value: rhs };
-    }
-    let op: FilterCondition["op"] = "gt";
-    if (/>=|at least|on or after/.test(word)) op = "gte";
-    else if (/<=|at most|on or before/.test(word)) op = "lte";
-    else if (/>|greater|more|older|above|over|after/.test(word)) op = "gt";
-    else op = "lt";
-    return { column: col, op, value: num(rhs) };
+  }
+  return found;
+}
+
+function leftoverUnknownLabels(text: string, hits: LabelHit[], report: InspectReport): string[] {
+  let stripped = text;
+  const named = [...hits].sort((a, b) => b.start - a.start);
+  for (const h of named) {
+    stripped = stripped.slice(0, h.start) + " " + stripped.slice(h.end);
+  }
+  stripped = stripped.replace(BETWEEN_RE, " ").replace(CMP_RE, " ").replace(YEAR_RE, " ");
+  const tokens = stripped
+    .split(/[^a-zA-Z0-9]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 1 && !STOP.has(t.toLowerCase()));
+  const known = new Set(hits.map((h) => h.value.toLowerCase()));
+  const columns = new Set(report.columnNames.map((c) => c.toLowerCase()));
+  return tokens.filter((t) => !known.has(t.toLowerCase()) && !columns.has(t.toLowerCase()));
+}
+
+/**
+ * English like "A or B from X or Y" is almost always
+ *   (col1 in {A,B}) AND (col2 in {X,Y})
+ * Never flatten into a single OR chain.
+ */
+export function parseNaturalLanguage(prompt: string, report: InspectReport): ParseOutcome {
+  const cleaned = prompt.replace(/[?!]+$/g, "").trim();
+  const hits = extractLabelHits(cleaned, report);
+  const byCol = groupHitsByColumn(hits);
+  const extras = parseNumericAndDate(cleaned, report);
+
+  for (const extra of extras) {
+    if ("clarify" in extra) return { ok: false, clarify: extra.clarify };
   }
 
-  // is / equals / in
-  const mentioned = findColumnsInText(text, columns);
-  const col = mentioned[0];
-  if (col) {
+  const namedCols = findColumnsInText(cleaned, report.columnNames);
+  for (const colName of namedCols) {
+    if (byCol.has(colName)) continue;
+    const meta = report.columns.find((c) => c.name === colName);
+    if (!meta?.uniqueValues?.length) continue;
+    // "Department is Sales" already captured via hits; skip.
+  }
+
+  if (byCol.size >= 2) {
+    const unknown = leftoverUnknownLabels(cleaned, hits, report);
+    const cue = CROSS_AND_CUES.test(cleaned);
+    // Different dimensions joined by "or" without a grouping cue → ask.
+    if (!cue && /\bor\b/i.test(cleaned)) {
+      const dims = [...byCol.entries()].map(([col, vals]) => `${col}: ${vals.join(" / ")}`);
+      return {
+        ok: false,
+        clarify: {
+          question:
+            `I can read that two ways. Did you mean (${dims.join(") AND (")}), ` +
+            `or a single mixed OR across those columns?`,
+          options: [
+            dims.join(" AND "),
+            "One mixed OR (any of those labels)",
+            "Cancel",
+          ],
+        },
+        partial: {
+          logic: "and",
+          conditions: [...byCol.entries()].map(([col, vals]) => conditionFor(col, vals)),
+        },
+      };
+    }
+    if (unknown.length && /from|in|within/i.test(cleaned)) {
+      // Unknown token after from/in — likely a missing department label.
+      const dept = report.columns.find((c) => /dept|department|team/i.test(c.name));
+      return {
+        ok: false,
+        clarify: {
+          question: `I don't see “${unknown[0]}” in the sheet.${dept ? ` Known ${dept.name} values: ${dept.uniqueValues?.slice(0, 10).join(", ")}.` : ""} Did you mean only the labels I recognized?`,
+          options: [
+            [...byCol.entries()].map(([c, v]) => `${c} in ${v.join(", ")}`).join(" AND "),
+            "Cancel",
+          ],
+        },
+        partial: {
+          logic: "and",
+          conditions: [...byCol.entries()].map(([col, vals]) => conditionFor(col, vals)),
+        },
+      };
+    }
+  }
+
+  const conditions: Array<FilterCondition | FilterGroup> = [];
+  for (const [col, vals] of byCol) {
+    conditions.push(conditionFor(col, vals));
+  }
+  for (const extra of extras) {
+    if (!("clarify" in extra)) conditions.push(extra);
+  }
+
+  // Named column with leftover text (e.g. "Status is Active") already in hits.
+  // Free-text contains on a named text column:
+  if (!conditions.length && namedCols.length === 1) {
+    const col = namedCols[0]!;
     const meta = report.columns.find((c) => c.name === col);
-    const rest = text
+    const rest = cleaned
       .replace(new RegExp(col, "ig"), " ")
       .replace(/\b(is not|isn't|isnt|not in|not|!=|is|=|:|equals?|in)\b/gi, " ")
       .replace(/[.,]/g, " ")
       .trim();
-    const negated = /\b(is not|isn't|isnt|not in|not|!=)\b/i.test(text);
-    if (meta?.uniqueValues?.length) {
-      // multiple labels in this clause?
-      const labels = meta.uniqueValues.filter((v) => text.toLowerCase().includes(v.toLowerCase()));
-      if (labels.length > 1) {
-        return { column: col, op: negated ? "not_in" : "in", value: labels };
-      }
-      if (labels.length === 1) {
-        return { column: col, op: negated ? "ne" : "eq", value: labels[0] };
-      }
-      if (rest) {
-        const mapped = valuesFor(meta, rest);
-        if (mapped) return { column: col, op: negated ? "ne" : "eq", value: mapped };
+    const negated = /\b(is not|isn't|isnt|not in|not|!=)\b/i.test(cleaned);
+    if (rest && meta?.kind === "text") {
+      conditions.push({ column: col, op: negated ? "not_contains" : "contains", value: rest });
+    } else if (rest && meta?.kind.startsWith("numeric")) {
+      const n = num(rest);
+      if (Number.isFinite(n)) conditions.push({ column: col, op: negated ? "ne" : "eq", value: n });
+    } else if (rest && meta?.uniqueValues?.length) {
+      const mapped = valuesFor(meta, rest);
+      if (mapped) conditions.push({ column: col, op: negated ? "ne" : "eq", value: mapped });
+      else {
         return {
+          ok: false,
           clarify: {
             question: `I don't see “${rest}” in \`${col}\`. Which value did you mean?`,
             options: meta.uniqueValues.slice(0, 12),
@@ -152,60 +317,9 @@ function parseClause(raw: string, report: InspectReport): FilterCondition | Filt
         };
       }
     }
-    if (rest && (meta?.kind === "text" || meta?.kind === "id")) {
-      return { column: col, op: "contains", value: rest };
-    }
-    if (rest && (meta?.kind.startsWith("numeric") || false)) {
-      const n = num(rest);
-      if (Number.isFinite(n)) return { column: col, op: negated ? "ne" : "eq", value: n };
-    }
-  }
-
-  // bare categorical value (e.g. just "Sales")
-  for (const meta of report.columns) {
-    if (!meta.uniqueValues) continue;
-    const hits = meta.uniqueValues.filter((v) => text.toLowerCase() === v.toLowerCase() || new RegExp(`\\b${v}\\b`, "i").test(text));
-    if (hits.length === 1 && text.toLowerCase().includes(hits[0]!.toLowerCase())) {
-      return { column: meta.name, op: "eq", value: hits[0] };
-    }
-    if (hits.length > 1) {
-      return { column: meta.name, op: "in", value: hits };
-    }
-  }
-
-  return null;
-}
-
-function collectSameColumnAnd(plan: FilterGroup): { column: string; values: unknown[] } | null {
-  const eqs = plan.conditions.filter((c): c is FilterCondition => !isGroup(c) && (c.op === "eq" || c.op === "in"));
-  const byCol = new Map<string, unknown[]>();
-  for (const c of eqs) {
-    const list = byCol.get(c.column) ?? [];
-    if (Array.isArray(c.value)) list.push(...c.value);
-    else list.push(c.value);
-    byCol.set(c.column, list);
-  }
-  for (const [column, values] of byCol) {
-    const uniq = [...new Set(values.map((v) => String(v)))];
-    if (uniq.length > 1 && plan.logic === "and") return { column, values: uniq };
-  }
-  return null;
-}
-
-export function parseNaturalLanguage(prompt: string, report: InspectReport): ParseOutcome {
-  const cleaned = prompt.replace(/[?!]+$/g, "").trim();
-  const { logic, parts } = splitTopLevel(cleaned);
-  const conditions: Array<FilterCondition | FilterGroup> = [];
-
-  for (const part of parts) {
-    const parsed = parseClause(part, report);
-    if (!parsed) continue;
-    if ("clarify" in parsed) return { ok: false, clarify: parsed.clarify };
-    conditions.push(parsed);
   }
 
   if (!conditions.length) {
-    // maybe the whole string is a known column question handled elsewhere
     const maybeCol = matchColumn(cleaned, report.columnNames);
     if (maybeCol) {
       return {
@@ -225,29 +339,12 @@ export function parseNaturalLanguage(prompt: string, report: InspectReport): Par
     };
   }
 
-  const plan: FilterGroup = { logic, conditions };
-  const clash = collectSameColumnAnd(plan);
-  if (clash) {
-    return {
-      ok: false,
-      clarify: {
-        question: `\`${clash.column}\` can't be ${clash.values.map(String).join(" AND ")} at once — that hides every row. Did you mean ${clash.values.map(String).join(" OR ")}?`,
-        options: [`${clash.column} in ${clash.values.join(", ")}`, "Keep only the first value", "Cancel"],
-      },
-      partial: {
-        logic: "and",
-        conditions: [
-          { column: clash.column, op: "in", value: clash.values },
-          ...plan.conditions.filter((c) => isGroup(c) || c.column !== clash.column),
-        ],
-      },
-    };
-  }
+  const plan: FilterGroup = { logic: "and", conditions };
   return { ok: true, plan };
 }
 
 const FILTER_CUES =
-  /\b(where|only|between|greater|less|above|below|over|under|older|younger|from|in 20|status|department|filter|rows?|records?|equals?|is active|is not)\b/i;
+  /\b(where|only|between|greater|less|above|below|over|under|older|younger|from|in 20|status|department|filter|rows?|records?|equals?|is active|is not|inactive|on leave|employees?)\b/i;
 const ANOMALY_CUES = /\b(anomal|outlier|unusual|strange|weird|odd value|extreme)\b/i;
 const DIST_CUES = /\b(distribut|histogram|normal|poisson|lognormal|gamma|skew|what family|pdf|which distribution)\b/i;
 const MEANING_CUES = /\b(what does|mean\??|meaning|what is .+ column|explain .+ column|describe .+ column)\b/i;
@@ -285,11 +382,11 @@ export function classifyIntent(prompt: string, report: InspectReport | null): In
   if (QUALITY_CUES.test(lower)) return { type: "quality" };
   if (FILTER_CUES.test(lower)) return { type: "filter", prompt: t };
   if (SUMMARY_CUES.test(lower)) return { type: "summary" };
-  // If it mentions a known categorical value or a comparison, treat as filter.
   if (report && (findColumnsInText(t, report.columnNames).length || BETWEEN_RE.test(t) || CMP_RE.test(t))) {
     return { type: "filter", prompt: t };
   }
+  if (report && extractLabelHits(t, report).length) return { type: "filter", prompt: t };
   return { type: "unknown", prompt: t };
 }
 
-export { findColumnsInText, IS_RE };
+export { findColumnsInText, IS_RE, extractLabelHits };

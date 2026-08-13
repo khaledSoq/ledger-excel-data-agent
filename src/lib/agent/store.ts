@@ -123,7 +123,18 @@ export const useAgent = create<AgentState>((set, get) => ({
       }));
       return;
     }
-    if (pending.resumePlan && /in |or |keep/i.test(option)) {
+    if (pending.resumePlan && /mixed or/i.test(option)) {
+      const flat = pending.resumePlan.conditions;
+      const orPlan: FilterGroup = { logic: "or", conditions: flat };
+      const turn = acceptClarify(orPlan, source, inspect);
+      set((s) => ({
+        rows: turn.rows,
+        result: turn.result,
+        messages: [...s.messages, ...turn.messages],
+      }));
+      return;
+    }
+    if (pending.resumePlan) {
       const turn = acceptClarify(pending.resumePlan, source, inspect);
       set((s) => ({
         rows: turn.rows,

@@ -52,6 +52,22 @@ date_after regex
 - AND = different dimensions (Department AND Age AND Status).
 - OR / op=in = multiple acceptable values of the SAME column.
 - NEVER `Department eq Sales AND Department eq Marketing` — that is empty.
+- NEVER flatten “A or B from X or Y” into one OR chain. English grouping wins:
+  “Inactive or On Leave employees from Finance or HR” means
+  (Status in Inactive, On Leave) AND (Department in Finance, HR).
+  “Active or On Leave people in Sales or Marketing” means
+  (Status in Active, On Leave) AND (Department in Sales, Marketing).
+- Pattern: `(status/role group) AND (department/location group)`.
+  Always emit a nested FilterGroup or use op=in per column, then AND the groups.
+  Example:
+  {
+    "logic": "and",
+    "conditions": [
+      {"column": "Status", "op": "in", "value": ["Inactive", "On Leave"]},
+      {"column": "Department", "op": "in", "value": ["Finance", "HR"]}
+    ]
+  }
+- If AND vs OR across *different* columns is still unclear, ASK. Do not guess.
 - Apply high-selectivity categorical / date cuts first, then numeric ranges,
   so remaining rows stay visible. The tool already reorders AND children;
   still plan in that order and read the returned `trace`.

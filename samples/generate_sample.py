@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent
-DEPTS = ["Sales", "Engineering", "Marketing", "Finance", "Operations", "Support"]
+DEPTS = ["Sales", "Engineering", "Marketing", "Finance", "HR", "Operations", "Support"]
 STATUSES = ["Active", "Active", "Active", "Active", "On Leave", "Inactive"]
 REGIONS = ["East", "West", "Central", "North", "South"]
 CITIES = {
@@ -24,6 +24,7 @@ ROLES = {
     "Engineering": ["Software Engineer", "Data Engineer", "Staff Engineer"],
     "Marketing": ["Content Lead", "Growth Marketer", "Designer"],
     "Finance": ["Analyst", "Controller", "FP&A"],
+    "HR": ["HR Partner", "Recruiter", "People Ops"],
     "Operations": ["Ops Coordinator", "Program Manager"],
     "Support": ["Support Specialist", "Success Manager"],
 }

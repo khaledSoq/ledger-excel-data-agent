@@ -17,12 +17,12 @@ import { fitDistributions } from "@/lib/agent/distributions";
 import type { ColumnMeta, DataRow } from "@/lib/agent/types";
 
 const PROMPTS = [
+  "All Inactive or On Leave employees from Finance or HR",
+  "Active or On Leave people in Sales or Marketing",
+  "Employees who are Inactive from Engineering",
   "Age between 25 and 40 and Department is Sales",
   "Only records from 2024 where Status is Active",
-  "Employees in Sales or Marketing with Salary above 90000",
   "Are there any anomalies? Which formula did you use?",
-  "Explain the distribution of Salary",
-  "What does the Performance column mean?",
 ];
 
 export function Workspace() {

@@ -1,6 +1,6 @@
 import type { DataRow } from "./types";
 
-const DEPTS = ["Sales", "Engineering", "Marketing", "Finance", "Operations", "Support"] as const;
+const DEPTS = ["Sales", "Engineering", "Marketing", "Finance", "HR", "Operations", "Support"] as const;
 const STATUSES = ["Active", "Active", "Active", "Active", "On Leave", "Inactive"] as const;
 const REGIONS = ["East", "West", "Central", "North", "South"] as const;
 const CITIES: Record<(typeof REGIONS)[number], string[]> = {
@@ -15,6 +15,7 @@ const ROLES: Record<(typeof DEPTS)[number], string[]> = {
   Engineering: ["Software Engineer", "Data Engineer", "Staff Engineer"],
   Marketing: ["Content Lead", "Growth Marketer", "Designer"],
   Finance: ["Analyst", "Controller", "FP&A"],
+  HR: ["HR Partner", "Recruiter", "People Ops"],
   Operations: ["Ops Coordinator", "Program Manager"],
   Support: ["Support Specialist", "Success Manager"],
 };
