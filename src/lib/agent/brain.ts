@@ -37,7 +37,7 @@ export function greetOnInspect(fileName: string, inspect: InspectReport): ChatMe
     say(
       "agent",
       `Inspected **${fileName}** — ${inspect.nRows.toLocaleString()} rows × ${inspect.nCols} columns. ` +
-        `Headers: ${inspect.columnNames.map((c) => \`${c}\`).join(", ")}. ` +
+        `Headers: ${inspect.columnNames.map((c) => "`" + c + "`").join(", ")}. ` +
         `I'll cut high-selectivity fields first (${first}) so AND combinations don't hide the rest of the table.${quality} ` +
         `Describe the slice you want, or ask what a column means.`,
     ),
@@ -86,20 +86,7 @@ export function handlePrompt(
     const cols = intent.column
       ? inspect.columns.filter((c) => c.name === intent.column)
       : inspect.columns;
-    if (intent.column && !cols.length) {
-      return {
-        inspect,
-        rows: current,
-        result: null,
-        messages: [
-          say(
-            "agent",
-            `I don't have a column called \`${intent.column}\`. Headers: ${inspect.columnNames.map((c) => \`${c}\`).join(", ")}.`,
-          ),
-        ],
-      };
-    }
-    const lines = cols.slice(0, 12).map((c) => `**${c.name}** (${c.kind}) — ${c.meaning}`);
+    const lines = cols.map((c) => `**${c.name}** (${c.kind}) — ${c.meaning}`);
     return {
       inspect,
       rows: current,
@@ -117,29 +104,32 @@ export function handlePrompt(
   }
 
   if (intent.type === "summary") {
-    const working = current.length === source.length ? inspect : inspectRows(current);
     const n = current.length;
+    const working = n === source.length ? inspect : inspectRows(current);
+    const cat = working.columns.find((c) => c.kind === "categorical");
+    const num = working.columns.find((c) => c.kind === "numeric_continuous" && c.stats);
     const bits = [
       n === source.length
         ? `Working set: all **${fmt(n)}** source rows.`
         : `Working set: **${fmt(n)}** of ${fmt(source.length)} source rows (current filter applied).`,
     ];
-    const cats = working.columns.filter((c) => c.kind === "categorical" && c.valueCounts);
-    for (const cat of cats.slice(0, 3)) {
-      const top = Object.entries(cat.valueCounts!)
+    if (cat?.valueCounts) {
+      const top = Object.entries(cat.valueCounts)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 4)
         .map(([k, v]) => `${k} (${v})`)
         .join(", ");
-      bits.push(`\`${cat.name}\` mix: ${top}.`);
+      bits.push("`" + cat.name + "` mix: " + top + ".");
     }
-    const nums = working.columns.filter((c) => c.kind.startsWith("numeric") && c.stats);
-    for (const num of nums.slice(0, 3)) {
-      const s = num.stats!;
+    if (num?.stats) {
       bits.push(
-        `\`${num.name}\` median ${Number(s.median).toLocaleString(undefined, { maximumFractionDigits: 1 })}, ` +
-          `mean ${Number(s.mean).toLocaleString(undefined, { maximumFractionDigits: 1 })}, ` +
-          `IQR ${Number(s.q1).toLocaleString(undefined, { maximumFractionDigits: 0 })}–${Number(s.q3).toLocaleString(undefined, { maximumFractionDigits: 0 })}.`,
+        "`" + num.name + "` median " +
+          Number(num.stats.median).toLocaleString(undefined, { maximumFractionDigits: 1 }) +
+          ", IQR " +
+          Number(num.stats.q1).toFixed(0) +
+          "–" +
+          Number(num.stats.q3).toFixed(0) +
+          ".",
       );
     }
     bits.push("Ask for anomalies or a distribution if you want the formulas.");
@@ -150,9 +140,7 @@ export function handlePrompt(
     const report = detectAnomalies(current, intent.column ? [intent.column] : undefined);
     const notable = report.columns.filter((c) => c.nFlagged > 0);
     const lines = [
-      `Anomaly scan on the **current ${fmt(current.length)} rows**` +
-        (intent.column ? ` (column \`${intent.column}\`)` : "") +
-        `. Chooser: ${report.methodSelection}`,
+      `Anomaly scan on the **current ${fmt(current.length)} rows**. Chooser: ${report.methodSelection}`,
       "",
     ];
     if (!notable.length) {
@@ -160,7 +148,7 @@ export function handlePrompt(
     } else {
       for (const c of notable.slice(0, 4)) {
         lines.push(`**${c.column}** — ${c.formula.name}`);
-        lines.push(`Formula: \`${c.formula.formula}\``);
+        lines.push("Formula: `" + c.formula.formula + "`");
         lines.push(`Why this method: ${c.why}`);
         lines.push(`${c.nFlagged} flagged. Example: ${c.records.slice(0, 3).map((r) => String(r.value)).join(", ")}.`);
         lines.push("");
@@ -172,37 +160,24 @@ export function handlePrompt(
   if (intent.type === "distribution") {
     const fits = fitDistributions(current, intent.column ? [intent.column] : undefined);
     if (!fits.length) {
-      const nums = inspect.columns.filter((c) => c.kind.startsWith("numeric")).map((c) => `\`${c.name}\``);
       return {
         inspect,
         rows: current,
         result: null,
-        messages: [
-          say(
-            "agent",
-            intent.column
-              ? `I couldn't fit a distribution for \`${intent.column}\`. Numeric columns: ${nums.join(", ") || "none"}.`
-              : `No numeric columns to fit on the current ${fmt(current.length)} rows. ${nums.length ? `Try ${nums.slice(0, 4).join(", ")}.` : ""}`,
-          ),
-        ],
+        messages: [say("agent", "No numeric columns to fit. Ask about a specific measure.")],
       };
     }
-    const scope = intent.column ? `for \`${intent.column}\`` : `on the current ${fmt(current.length)} rows`;
-    const lines = [
-      `Distribution fit ${scope}:`,
-      "",
-      ...fits.slice(0, 5).map((f) => {
-        return (
-          `**${f.column}** → ${f.family.name}\n` +
-          `Rule: ${f.why}\n` +
-          `Density: \`${f.family.pdf}\`\n` +
-          `Fitted: ${Object.entries(f.fitted)
-            .map(([k, v]) => `${k}=${v == null ? "—" : Number(v).toPrecision(4)}`)
-            .join(", ")}`
-        );
-      }),
-    ];
-    return { inspect, rows: current, result: null, messages: [say("agent", lines.join("\n"))] };
+    const lines = fits.slice(0, 5).map((f) => {
+      return (
+        `**${f.column}** → ${f.family.name}\n` +
+        `Rule: ${f.why}\n` +
+        "Density: `" + f.family.pdf + "`\n" +
+        `Fitted: ${Object.entries(f.fitted)
+          .map(([k, v]) => `${k}=${v == null ? "—" : Number(v).toPrecision(4)}`)
+          .join(", ")}`
+      );
+    });
+    return { inspect, rows: current, result: null, messages: [say("agent", lines.join("\n\n"))] };
   }
 
   if (intent.type === "unknown") {
@@ -213,8 +188,9 @@ export function handlePrompt(
       messages: [
         say(
           "agent",
-          `I can filter rows, **summarize** the current ${fmt(current.length)} results, check **anomalies**, fit a **distribution**, or explain a **column**. ` +
-            `Examples: “Age between 25 and 40 and Department is Sales”, “summarize the filtered results”, “distribution of Salary”, “are there anomalies?”.`,
+          "I can filter rows, summarize the current " + fmt(current.length) +
+            " results, check anomalies, fit a distribution, or explain a column. " +
+            "Examples: Age between 25 and 40 and Department is Sales, summarize the filtered results, distribution of Salary, are there anomalies?",
         ),
       ],
     };
@@ -239,7 +215,7 @@ export function handlePrompt(
     const killer = result.trace.find((t) => t.emptiedResult);
     insights.push(
       killer && killer.predicate && "column" in killer.predicate
-        ? `\`${killer.predicate.column}\` ${killer.predicate.op} hid every remaining row. Relax that predicate or switch same-column values to OR.`
+        ? "`" + killer.predicate.column + "` " + killer.predicate.op + " hid every remaining row. Relax that predicate or switch same-column values to OR."
         : "Nothing matched. Try loosening a range or using OR for labels.",
     );
   } else {
@@ -251,7 +227,7 @@ export function handlePrompt(
         counts.set(k, (counts.get(k) ?? 0) + 1);
       }
       const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
-      if (top) insights.push(`Dominant \`${cat.name}\` in the slice: ${top[0]} (${top[1]}).`);
+      if (top) insights.push("Dominant `" + cat.name + "` in the slice: " + top[0] + " (" + top[1] + ").");
     }
     insights.push("Download the CSV, or ask to summarize, flag anomalies, or fit a distribution.");
   }
