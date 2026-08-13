@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { acceptClarify, greetOnInspect, handlePrompt, say } from "./brain";
+import { acceptClarify, greetOnInspect, handlePromptAsync, say } from "./brain";
 import { downloadCsv, parseWorkbook } from "./excel";
 import { inspectRows } from "./inspect";
 import { buildSampleEmployees, SAMPLE_BLURB, SAMPLE_FILE_NAME } from "./sample-data";
@@ -28,7 +28,8 @@ const welcome: ChatMessage[] = [
     "agent",
     "Please upload your Excel file, then describe the data you need. " +
       "I inspect real headers first and never invent column names. " +
-      "You can also load the sample workbook to try a few prompts.",
+      "You can also load the sample workbook to try a few prompts. " +
+      "After filtering, ask me to summarize, check anomalies, or fit a distribution on the current result.",
   ),
 ];
 
@@ -94,9 +95,14 @@ export const useAgent = create<AgentState>((set, get) => ({
     const trimmed = text.trim();
     if (!trimmed) return;
     const { inspect, source, rows } = get();
-    set((s) => ({ messages: [...s.messages, say("user", trimmed)], pending: null }));
+    set((s) => ({
+      messages: [...s.messages, say("user", trimmed)],
+      pending: null,
+      busy: true,
+    }));
     if (!inspect || !source.length) {
       set((s) => ({
+        busy: false,
         messages: [
           ...s.messages,
           say("agent", "Please upload your Excel file first — or load the sample workbook."),
@@ -104,13 +110,25 @@ export const useAgent = create<AgentState>((set, get) => ({
       }));
       return;
     }
-    const turn = handlePrompt(trimmed, source, inspect, rows);
-    set((s) => ({
-      rows: turn.rows,
-      result: turn.result,
-      pending: turn.pendingClarify ?? null,
-      messages: [...s.messages, ...turn.messages],
-    }));
+    void handlePromptAsync(trimmed, source, inspect, rows, { preferOllama: true })
+      .then((turn) => {
+        set((s) => ({
+          busy: false,
+          rows: turn.rows,
+          result: turn.result,
+          pending: turn.pendingClarify ?? null,
+          messages: [...s.messages, ...turn.messages],
+        }));
+      })
+      .catch(() => {
+        set((s) => ({
+          busy: false,
+          messages: [
+            ...s.messages,
+            say("agent", "Something went wrong while reasoning about that request. Try again."),
+          ],
+        }));
+      });
   },
 
   chooseOption: (option) => {
