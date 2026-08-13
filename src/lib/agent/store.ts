@@ -110,7 +110,7 @@ export const useAgent = create<AgentState>((set, get) => ({
       }));
       return;
     }
-    void handlePromptAsync(trimmed, source, inspect, rows, { preferOllama: true })
+    void handlePromptAsync(trimmed, source, inspect, rows, { preferOllama: false })
       .then((turn) => {
         set((s) => ({
           busy: false,
