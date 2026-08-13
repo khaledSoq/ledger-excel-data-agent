@@ -1,0 +1,19 @@
+# Excel Data Agent — Python dependencies
+# Install into a venv:  python3 -m venv .venv && source .venv/bin/activate
+#                       pip install -r requirements.txt
+
+google-adk>=1.0.0
+# LiteLLM 1.82.7–1.82.8 were compromised (March 2026). Require a patched release.
+litellm>=1.84
+pandas>=2.1
+openpyxl>=3.1
+numpy>=1.26
+scipy>=1.11
+python-dotenv>=1.0
+
+# Optional UIs
+streamlit>=1.36
+gradio>=4.44
+
+# Tests
+pytest>=8.0

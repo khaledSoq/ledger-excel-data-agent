@@ -1,0 +1,81 @@
+EmployeeID,Name,Age,Department,Role,Status,Region,City,HireDate,Salary,Performance,Headcount
+E0001,Person 1,25,Marketing,Designer,Active,West,Seattle,2022-04-02,480000,4.0,1
+E0002,Person 2,82,Engineering,Data Engineer,On Leave,East,Boston,2020-07-09,80370,3.9,3
+E0003,Person 3,36,Operations,Program Manager,Contractor,East,Boston,2025-05-08,75771,2.9,0
+E0004,Person 4,30,Sales,Sales Manager,Active,South,Atlanta,2024-11-07,89525,0.2,1
+E0005,Person 5,58,Support,Support Specialist,On Leave,West,Portland,2020-08-13,80834,3.1,0
+E0006,Person 6,56,Operations,Program Manager,On Leave,West,San Francisco,2022-10-27,77958,3.9,0
+E0007,Person 7,37,Engineering,Data Engineer,Active,West,Portland,2023-12-16,105242,3.9,1
+E0008,Person 8,29,Marketing,Content Lead,Active,South,Atlanta,2020-06-12,81222,3.6,1
+E0009,Person 9,57,Sales,SDR,Active,East,Philadelphia,2024-04-28,59058,3.0,0
+E0010,Person 10,51,Operations,Program Manager,Active,North,Minneapolis,2023-04-16,99246,3.7,0
+E0011,Person 11,58,Support,Success Manager,Active,Central,Denver,2023-09-01,125407,3.5,0
+E0012,Person 12,32,Sales,SDR,Active,North,Minneapolis,2022-01-11,75896,3.1,2
+E0013,Person 13,53,Engineering,Data Engineer,On Leave,North,Minneapolis,2022-03-25,109191,4.0,3
+E0014,Person 14,48,Finance,Analyst,Active,South,Austin,2021-08-07,119175,3.5,0
+E0015,Person 15,36,Engineering,Data Engineer,Active,West,San Francisco,2021-05-04,125849,3.7,0
+E0016,Person 16,45,Engineering,Staff Engineer,Active,North,Minneapolis,2023-01-13,79839,3.2,1
+E0017,Person 17,47,Support,Success Manager,Inactive,South,Austin,2022-03-28,85223,3.8,0
+E0018,Person 18,32,Sales,Account Exec,Active,West,Portland,2022-07-05,110800,4.2,0
+E0019,Person 19,45,Operations,Program Manager,Active,East,Boston,2025-05-11,86808,3.4,2
+E0020,Person 20,45,Marketing,Growth Marketer,Active,Central,Dallas,2023-06-01,83205,3.7,1
+E0021,Person 21,28,Marketing,Designer,Active,East,Boston,2020-11-05,91939,2.5,1
+E0022,Person 22,55,Sales,Sales Manager,Active,West,San Francisco,2025-05-15,74205,4.4,2
+E0023,Person 23,45,Sales,Sales Manager,Active,Central,Denver,2022-12-11,106150,3.2,3
+E0024,Person 24,36,Operations,Ops Coordinator,Active,Central,Dallas,2023-08-10,67971,2.8,2
+E0025,Person 25,53,Engineering,Data Engineer,Active,West,San Francisco,2022-12-10,89312,3.7,0
+E0026,Person 26,44,Engineering,Data Engineer,Active,South,Austin,2025-05-26,51977,4.1,0
+E0027,Person 27,34,Sales,Account Exec,On Leave,West,San Francisco,2022-09-03,81176,4.3,2
+E0028,Person 28,29,Marketing,Growth Marketer,Active,East,Boston,2024-09-19,118515,2.9,1
+E0029,Person 29,47,Support,Support Specialist,Active,Central,Chicago,2020-07-10,63104,3.9,0
+E0030,Person 30,51,Sales,SDR,On Leave,West,Portland,2023-05-08,95517,3.2,0
+E0031,Person 31,30,Engineering,Staff Engineer,Inactive,South,Austin,2023-02-10,123970,3.8,1
+E0032,Person 32,34,Support,Support Specialist,Active,West,San Francisco,2022-06-21,97706,3.2,1
+E0033,Person 33,38,Engineering,Staff Engineer,Active,South,Atlanta,2021-11-12,59192,3.2,1
+E0034,Person 34,55,Support,Support Specialist,On Leave,South,Miami,2024-08-10,56669,4.3,0
+E0035,Person 35,50,Operations,Ops Coordinator,Active,South,Austin,2020-02-22,96086,2.7,1
+E0036,Person 36,25,Operations,Program Manager,On Leave,East,Boston,2023-02-27,82002,4.4,1
+E0037,Person 37,39,Sales,Sales Manager,Active,West,Seattle,2021-02-09,99878,3.7,3
+E0038,Person 38,54,Sales,SDR,Active,North,Detroit,2021-11-11,82567,3.3,1
+E0039,Person 39,38,Engineering,Data Engineer,Active,South,Austin,2024-12-14,125646,2.9,1
+E0040,Person 40,42,Sales,Account Exec,Active,North,Detroit,2022-07-08,103992,3.8,3
+E0041,Person 41,45,Sales,Account Exec,Active,West,Portland,2025-04-22,115218,4.7,0
+E0042,Person 42,36,Finance,Controller,On Leave,North,Detroit,2020-12-13,102101,4.2,1
+E0043,Person 43,27,Engineering,Data Engineer,On Leave,Central,Dallas,2021-10-28,91378,3.5,2
+E0044,Person 44,55,Sales,Account Exec,Active,North,Minneapolis,2021-11-23,76645,3.0,0
+E0045,Person 45,24,Sales,SDR,Active,Central,Denver,2021-07-24,101459,3.4,3
+E0046,Person 46,56,Marketing,Growth Marketer,Inactive,North,Minneapolis,2020-11-15,112450,3.2,0
+E0047,Person 47,26,Sales,SDR,Active,West,Seattle,2022-06-04,91606,3.7,1
+E0048,Person 48,29,Engineering,Data Engineer,On Leave,East,New York,2021-07-09,76302,3.8,1
+E0049,Person 49,37,Engineering,Software Engineer,Active,East,Boston,2022-12-29,135947,2.9,0
+E0050,Person 50,35,Marketing,Growth Marketer,Active,Central,Dallas,2023-01-06,86733,4.4,3
+E0051,Person 51,22,Sales,Sales Manager,Active,Central,Dallas,2020-03-30,113223,3.7,0
+E0052,Person 52,49,Finance,FP&A,Active,East,New York,2023-09-24,79464,2.9,2
+E0053,Person 53,34,Engineering,Software Engineer,Inactive,West,San Francisco,2021-12-16,105935,2.6,0
+E0054,Person 54,26,Sales,Account Exec,Active,West,Seattle,2020-02-13,65871,2.6,0
+E0055,Person 55,54,Support,Success Manager,Active,North,Minneapolis,2024-12-01,84986,3.1,1
+E0056,Person 56,50,Engineering,Staff Engineer,Active,West,San Francisco,2021-07-18,109124,3.6,0
+E0057,Person 57,44,Sales,SDR,Active,Central,Dallas,2021-04-05,98652,4.2,1
+E0058,Person 58,54,Support,Support Specialist,Active,West,San Francisco,2021-06-06,93289,3.3,1
+E0059,Person 59,41,Sales,Sales Manager,On Leave,North,Minneapolis,2020-03-01,87619,4.1,2
+E0060,Person 60,42,Support,Support Specialist,Active,South,Austin,2022-03-22,88149,2.8,3
+E0061,Person 61,49,Support,Support Specialist,Active,South,Miami,2023-07-22,88665,2.3,1
+E0062,Person 62,23,Support,Success Manager,Active,West,San Francisco,2020-07-07,116747,3.9,1
+E0063,Person 63,56,Sales,SDR,Active,East,Boston,2023-07-20,83194,2.9,2
+E0064,Person 64,55,Operations,Ops Coordinator,Active,South,Atlanta,2020-07-21,118913,4.1,0
+E0065,Person 65,51,Support,Success Manager,Active,West,Seattle,2021-05-01,74336,3.6,1
+E0066,Person 66,31,Support,Success Manager,Inactive,West,Portland,2020-06-21,79154,4.5,1
+E0067,Person 67,25,Engineering,Staff Engineer,Active,East,Boston,2022-09-28,48000,3.8,2
+E0068,Person 68,55,Finance,FP&A,Active,Central,Chicago,2024-01-05,87535,4.4,0
+E0069,Person 69,40,Sales,SDR,Active,North,Detroit,2020-02-19,59772,3.9,0
+E0070,Person 70,27,Engineering,Software Engineer,Active,East,Philadelphia,2023-04-19,105795,4.3,3
+E0071,Person 71,29,Support,Success Manager,Active,South,Austin,2021-08-09,88225,3.1,0
+E0072,Person 72,50,Sales,SDR,Active,North,Detroit,2023-11-10,67961,4.2,0
+E0073,Person 73,42,Sales,Account Exec,Active,Central,Denver,2020-01-18,92158,2.3,0
+E0074,Person 74,45,Support,Support Specialist,On Leave,Central,Dallas,2021-06-16,108430,3.9,1
+E0075,Person 75,28,Marketing,Content Lead,Inactive,East,Boston,2021-08-11,117129,3.9,0
+E0076,Person 76,34,Finance,Analyst,Active,South,Miami,2021-10-22,96582,2.4,1
+E0077,Person 77,27,Operations,Ops Coordinator,Active,South,Miami,2021-03-06,119824,3.9,3
+E0078,Person 78,57,Marketing,Growth Marketer,Active,North,Detroit,2020-04-24,106178,4.2,0
+E0079,Person 79,37,Support,Support Specialist,Active,Central,Chicago,2022-04-25,84784,4.4,2
+E0080,Person 80,54,Engineering,Data Engineer,Active,East,New York,2021-03-15,109525,3.1,3

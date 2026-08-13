@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "excel-data-agent"
+version = "1.0.0"
+description = "Local-first Google ADK agent that inspects Excel, filters with natural language, and writes CSV."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "google-adk>=1.0.0",
+  "litellm>=1.84",
+  "pandas>=2.1",
+  "openpyxl>=3.1",
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.36", "gradio>=4.44"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+excel-agent = "excel_data_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["excel_data_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
