@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { acceptClarify, greetOnInspect, handlePromptAsync, say } from "./brain";
-import { looksAnalytical } from "./narrate";
 import { downloadCsv, parseWorkbook } from "./excel";
 import { inspectRows } from "./inspect";
 import { buildSampleEmployees, SAMPLE_BLURB, SAMPLE_FILE_NAME } from "./sample-data";
@@ -95,7 +94,7 @@ export const useAgent = create<AgentState>((set, get) => ({
   send: (text) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const { inspect, source, rows } = get();
+    const { inspect, source, rows, result } = get();
     set((s) => ({
       messages: [...s.messages, say("user", trimmed)],
       pending: null,
@@ -111,8 +110,10 @@ export const useAgent = create<AgentState>((set, get) => ({
       }));
       return;
     }
-    void looksAnalytical;
-    void handlePromptAsync(trimmed, source, inspect, rows, { preferOllama: false })
+    void handlePromptAsync(trimmed, source, inspect, rows, {
+      preferOllama: false,
+      currentResult: result,
+    })
       .then((turn) => {
         set((s) => ({
           busy: false,

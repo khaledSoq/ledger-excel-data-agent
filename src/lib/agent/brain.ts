@@ -2,6 +2,7 @@ import { detectAnomalies } from "./anomalies";
 import { describePlan, applyFilter } from "./filter-engine";
 import { fitDistributions } from "./distributions";
 import { inspectRows } from "./inspect";
+import { looksAnalytical, narrateOpen } from "./narrate";
 import { parseNaturalLanguage } from "./nl-parse";
 import { reason, reasonIntent, resolveColumnFlexible, type ReasonedIntent } from "./reason";
 import type {
@@ -53,6 +54,30 @@ function withNote(text: string, intent: ReasonedIntent): string {
   if (!intent.rationale) return text;
   const tag = intent.source === "ollama" ? "local LLM" : "reasoner";
   return `_(\`${tag}\`: ${intent.rationale})_\n\n${text}`;
+}
+
+const WHY_RE =
+  /\b(why|how come|what (?:drives|explains|causes)|reason for|looks? (?:like|this)|shape of)\b/i;
+
+function keep(result: FilterResult | null): FilterResult | null {
+  return result;
+}
+
+function narrateTurn(
+  prompt: string,
+  source: DataRow[],
+  inspect: InspectReport,
+  current: DataRow[],
+  currentResult: FilterResult | null,
+  note?: ReasonedIntent,
+): AgentTurn {
+  const text = narrateOpen(prompt, current, inspect, source.length);
+  return {
+    inspect,
+    rows: current,
+    result: keep(currentResult),
+    messages: [say("agent", note ? withNote(text, note) : text)],
+  };
 }
 
 /** Hard analytical cues — never route these to the filter parser. */
@@ -112,12 +137,13 @@ function runIntent(
   source: DataRow[],
   inspect: InspectReport,
   current: DataRow[],
+  currentResult: FilterResult | null,
 ): AgentTurn {
   if (intent.type === "help") {
     return {
       inspect,
       rows: current,
-      result: null,
+      result: keep(currentResult),
       messages: [
         say(
           "agent",
@@ -148,7 +174,7 @@ function runIntent(
       return {
         inspect,
         rows: current,
-        result: null,
+        result: keep(currentResult),
         messages: [
           say(
             "agent",
@@ -164,7 +190,7 @@ function runIntent(
     return {
       inspect,
       rows: current,
-      result: null,
+      result: keep(currentResult),
       messages: [say("agent", withNote(lines.join("\n\n"), intent))],
     };
   }
@@ -174,7 +200,12 @@ function runIntent(
     const text = q.length
       ? q.map((i) => `**${i.column}** · ${i.issue} — ${i.detail}`).join("\n\n")
       : "No structural quality issues (missingness, constants, identifiers) on this sheet.";
-    return { inspect, rows: current, result: null, messages: [say("agent", withNote(text, intent))] };
+    return {
+      inspect,
+      rows: current,
+      result: keep(currentResult),
+      messages: [say("agent", withNote(text, intent))],
+    };
   }
 
   if (intent.type === "summary") {
@@ -206,7 +237,12 @@ function runIntent(
       );
     }
     bits.push("Ask for anomalies or a distribution if you want the formulas.");
-    return { inspect, rows: current, result: null, messages: [say("agent", withNote(bits.join(" "), intent))] };
+    return {
+      inspect,
+      rows: current,
+      result: keep(currentResult),
+      messages: [say("agent", withNote(bits.join(" "), intent))],
+    };
   }
 
   if (intent.type === "anomalies") {
@@ -231,10 +267,19 @@ function runIntent(
         lines.push("");
       }
     }
-    return { inspect, rows: current, result: null, messages: [say("agent", withNote(lines.join("\n"), intent))] };
+    return {
+      inspect,
+      rows: current,
+      result: keep(currentResult),
+      messages: [say("agent", withNote(lines.join("\n"), intent))],
+    };
   }
 
   if (intent.type === "distribution") {
+    // "why is the distribution like this?" should explain, not just name a family.
+    if (WHY_RE.test(prompt)) {
+      return narrateTurn(prompt, source, inspect, current, currentResult, intent);
+    }
     const fits = fitDistributions(current, intent.column ? [intent.column] : undefined);
     if (!fits.length) {
       const nums = inspect.columns
@@ -243,7 +288,7 @@ function runIntent(
       return {
         inspect,
         rows: current,
-        result: null,
+        result: keep(currentResult),
         messages: [
           say(
             "agent",
@@ -276,20 +321,28 @@ function runIntent(
         );
       }),
     ];
-    return { inspect, rows: current, result: null, messages: [say("agent", withNote(lines.join("\n"), intent))] };
-  }
-
-  if (intent.type === "unknown") {
     return {
       inspect,
       rows: current,
-      result: null,
+      result: keep(currentResult),
+      messages: [say("agent", withNote(lines.join("\n"), intent))],
+    };
+  }
+
+  if (intent.type === "unknown") {
+    if (looksAnalytical(prompt)) {
+      return narrateTurn(prompt, source, inspect, current, currentResult, intent);
+    }
+    return {
+      inspect,
+      rows: current,
+      result: keep(currentResult),
       messages: [
         say(
           "agent",
           withNote(
             `I can **filter** rows, **summarize** the current ${fmt(current.length)} results, check **anomalies**, fit a **distribution**, or **explain a column**. ` +
-              `Examples: "Age between 25 and 40 and Department is Sales", "summarize the filtered results", "distribution of SalarySAR", "are there anomalies?".`,
+              `Examples: "Age between 25 and 40 and Department is Sales", "summarize the filtered results", "distribution of Salary", "are there anomalies?".`,
             intent,
           ),
         ),
@@ -301,14 +354,17 @@ function runIntent(
   const filterPrompt = intent.type === "filter" ? intent.prompt : prompt;
   const parsed = parseNaturalLanguage(filterPrompt, inspect);
   if (!parsed.ok) {
+    if (looksAnalytical(prompt) || WHY_RE.test(prompt)) {
+      return narrateTurn(prompt, source, inspect, current, currentResult, intent);
+    }
     const retry = analyticalOverride(prompt, inspect) ?? reasonIntent(prompt, inspect);
     if (retry.type !== "filter" && retry.type !== "unknown") {
-      return runIntent(retry, prompt, source, inspect, current);
+      return runIntent(retry, prompt, source, inspect, current, currentResult);
     }
     return {
       inspect,
       rows: current,
-      result: null,
+      result: keep(currentResult),
       pendingClarify: parsed.partial
         ? { ...parsed.clarify, resumePlan: parsed.partial }
         : parsed.clarify,
@@ -318,7 +374,7 @@ function runIntent(
           withNote(
             parsed.clarify.question.includes("couldn't")
               ? `I couldn't turn that into a filter. ` +
-                  `If you meant analysis on the current ${fmt(current.length)} rows, try "summarize the filtered results", "distribution of SalarySAR", or "are there anomalies?". ` +
+                  `If you meant analysis on the current ${fmt(current.length)} rows, try "summarize the filtered results", "distribution of Salary", or "are there anomalies?". ` +
                   `For a filter, name a column and a condition — e.g. "Age between 25 and 40 and Department is Sales".`
               : parsed.clarify.question,
             intent,
@@ -348,15 +404,44 @@ function runIntent(
   };
 }
 
+function decideAndRun(
+  prompt: string,
+  source: DataRow[],
+  inspect: InspectReport,
+  current: DataRow[],
+  currentResult: FilterResult | null,
+  intent: ReasonedIntent,
+): AgentTurn {
+  if (WHY_RE.test(prompt)) {
+    return narrateTurn(prompt, source, inspect, current, currentResult, intent);
+  }
+  return runIntent(intent, prompt, source, inspect, current, currentResult);
+}
+
 export function handlePrompt(
   prompt: string,
   source: DataRow[],
   inspect: InspectReport,
   current: DataRow[],
+  currentResult: FilterResult | null = null,
 ): AgentTurn {
+  if (WHY_RE.test(prompt)) {
+    return narrateTurn(prompt, source, inspect, current, currentResult);
+  }
+
   const hard = analyticalOverride(prompt, inspect);
-  const intent = hard ?? reasonIntent(prompt, inspect);
-  return runIntent(intent, prompt, source, inspect, current);
+  if (hard) return runIntent(hard, prompt, source, inspect, current, currentResult);
+
+  if (looksAnalytical(prompt)) {
+    const scored = reasonIntent(prompt, inspect);
+    if (scored.type !== "filter" && scored.type !== "unknown") {
+      return runIntent(scored, prompt, source, inspect, current, currentResult);
+    }
+    return narrateTurn(prompt, source, inspect, current, currentResult, scored);
+  }
+
+  const intent = reasonIntent(prompt, inspect);
+  return decideAndRun(prompt, source, inspect, current, currentResult, intent);
 }
 
 export async function handlePromptAsync(
@@ -364,26 +449,43 @@ export async function handlePromptAsync(
   source: DataRow[],
   inspect: InspectReport,
   current: DataRow[],
-  opts?: { preferOllama?: boolean; ollamaBase?: string; ollamaModel?: string },
+  opts?: {
+    preferOllama?: boolean;
+    ollamaBase?: string;
+    ollamaModel?: string;
+    currentResult?: FilterResult | null;
+  },
 ): Promise<AgentTurn> {
-  // Prefer fast offline reasoner; only call Ollama when explicitly enabled.
+  const currentResult = opts?.currentResult ?? null;
   const prefer =
     opts?.preferOllama === true ||
     (typeof localStorage !== "undefined" && localStorage.getItem("ledgerPreferOllama") === "1");
 
   if (!prefer) {
-    return handlePrompt(prompt, source, inspect, current);
+    return handlePrompt(prompt, source, inspect, current, currentResult);
+  }
+
+  if (WHY_RE.test(prompt)) {
+    return narrateTurn(prompt, source, inspect, current, currentResult);
   }
 
   const hard = analyticalOverride(prompt, inspect);
-  if (hard) return runIntent(hard, prompt, source, inspect, current);
+  if (hard) return runIntent(hard, prompt, source, inspect, current, currentResult);
+
+  if (looksAnalytical(prompt)) {
+    const scored = reasonIntent(prompt, inspect);
+    if (scored.type !== "filter" && scored.type !== "unknown") {
+      return runIntent(scored, prompt, source, inspect, current, currentResult);
+    }
+    return narrateTurn(prompt, source, inspect, current, currentResult, scored);
+  }
 
   const intent = await reason(prompt, inspect, {
     preferOllama: true,
     ollamaBase: opts?.ollamaBase,
     ollamaModel: opts?.ollamaModel,
   });
-  return runIntent(intent, prompt, source, inspect, current);
+  return decideAndRun(prompt, source, inspect, current, currentResult, intent);
 }
 
 export function acceptClarify(plan: FilterGroup, source: DataRow[], inspect: InspectReport): AgentTurn {
