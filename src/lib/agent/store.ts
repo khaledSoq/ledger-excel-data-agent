@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { acceptClarify, greetOnInspect, handlePromptAsync, say } from "./brain";
+import { looksAnalytical } from "./narrate";
 import { downloadCsv, parseWorkbook } from "./excel";
 import { inspectRows } from "./inspect";
 import { buildSampleEmployees, SAMPLE_BLURB, SAMPLE_FILE_NAME } from "./sample-data";
@@ -28,8 +29,8 @@ const welcome: ChatMessage[] = [
     "agent",
     "Please upload your Excel file, then describe the data you need. " +
       "I inspect real headers first and never invent column names. " +
-      "You can also load the sample workbook to try a few prompts. " +
-      "After filtering, ask me to summarize, check anomalies, or fit a distribution on the current result.",
+      "You can filter rows, then ask free-form questions: summarize, distribution of salaries, anomalies, or why a measure looks skewed. " +
+      "(Agent build 2026-08-14-analytics)",
   ),
 ];
 
@@ -110,6 +111,7 @@ export const useAgent = create<AgentState>((set, get) => ({
       }));
       return;
     }
+    void looksAnalytical;
     void handlePromptAsync(trimmed, source, inspect, rows, { preferOllama: false })
       .then((turn) => {
         set((s) => ({
